@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trial {{ trial_data.trial_number }}</title>
+    <style>
+        #stimulus {
+            font-size: 48px;
+            text-align: center;
+            margin-top: 20%;
+        }
+        #response, #thanks-message, #continue-button {
+            text-align: center;
+            margin-top: 50px;
+        }
+        #continue-button {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h2 id="trial-title">Trial {{ trial_data.trial_number }}</h2>
+    <div id="stimulus"></div>
+    <div id="response">
+        <button onclick="sendResponse('<')">&lt; Promedio MENOR a {{ trial_data.prom_fijo }}</button>
+        <button onclick="sendResponse('>')">&gt; Promedio MAYOR a {{ trial_data.prom_fijo }}</button>
+    </div>
+    <div id="thanks-message" style="display: none;">
+        <h2>Gracias por participar en el experimento.</h2>
+    </div>
+    <div id="continue-button">
+        <button onclick="resumeTrials()">Continuar</button>
+    </div>
+
+    <script>
+        let currentTrial = {{ trial_data.trial_number }};
+        const sessionId = {{ session_id }};
+        let d1Val = {{ trial_data.d1 }};
+        const maxTrials = 10; // Número máximo de trials permitidos
+
+        function showNumbers(numbers, displayTime) {
+    let index = 0;
+    const stimulusDiv = document.getElementById('stimulus');
+    document.getElementById('trial-title').innerText = `Trial ${currentTrial}`;
+
+    function showNextNumber() {
+        if (index < numbers.length) {
+            // Mostrar número por 400 ms
+            stimulusDiv.innerText = numbers[index];
+            index++;
+
+            setTimeout(() => {
+                // Borrar número y mostrar un espacio en blanco por 200 ms
+                stimulusDiv.innerText = '';
+                setTimeout(showNextNumber, 200); // Pausa de 200 ms antes de mostrar el siguiente número
+            }, displayTime * 400);
+        } else {
+            stimulusDiv.innerText = ''; // Limpia el estímulo al final
+        }
+    }
+
+    showNextNumber(); // Inicia la secuencia de mostrar los números
+    }
+
+        function sendResponse(response) {
+            if (currentTrial >= maxTrials) {
+                document.getElementById('response').style.display = 'none';
+                document.getElementById('trial-title').style.display = 'none';
+                document.getElementById('thanks-message').style.display = 'block';
+                return;
+            }
+
+            const csrfToken = getCookie('csrftoken');
+            fetch('/generate_trial_data/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                },
+                body: JSON.stringify({
+                    'trial_number': currentTrial,
+                    'response': response,
+                    'd1': d1Val,
+                    'session_id': sessionId
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    currentTrial = data.trial_data.trial_number;
+                    d1Val = data.trial_data.d1;
+
+                    if (currentTrial % 10 === 0) {
+                        pauseTrials();
+                    } else {
+                        showNumbers(data.trial_data.stimulus, 1);
+                        document.getElementById('trial-title').innerText = `Trial ${currentTrial}`;
+                    }
+                } else {
+                    document.getElementById('response').style.display = 'none';
+                    document.getElementById('trial-title').style.display = 'none';
+                    document.getElementById('thanks-message').style.display = 'block';
+                }
+            })
+            .catch(error => console.error("Error al generar datos del ensayo:", error));
+        }
+
+        function pauseTrials() {
+            document.getElementById('response').style.display = 'none';
+            document.getElementById('continue-button').style.display = 'block';
+        }
+
+        function resumeTrials() {
+            document.getElementById('response').style.display = 'block';
+            document.getElementById('continue-button').style.display = 'none';
+            showNumbers({{ trial_data.stimulus }}, 1);
+        }
+
+        // Muestra el primer estímulo al cargar la página
+        showNumbers({{ trial_data.stimulus }}, 1);
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
+</body>
+</html>
